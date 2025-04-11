@@ -16,6 +16,18 @@
       50%  { border-color: rgba(255, 0, 0, 0.2); box-shadow: 0 0 4px rgba(255, 0, 0, 0.1); }
       100% { border-color: rgba(255, 0, 0, 0.8); box-shadow: 0 0 8px rgba(255, 0, 0, 0.4); }
     }
+
+    /* heracenter表示用 */
+    #heracenter-image {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30%; /* 画面サイズの半分 */
+      max-width: 800px; /* 最大幅を設定 */
+      z-index: 4;
+      display: none; /* 初期状態では非表示 */
+    }
   </style>
   <meta charset="UTF-8">
   <title>ウキが浮かぶ釣り場</title>
@@ -124,6 +136,7 @@
       <button id="set-button" class="control-button" disabled>アワセ</button> <!-- アワセボタン -->
       <div id="timer">00:00:00</div>
     </div>
+    <img id="heracenter-image" src="./pic/heracenter.jpg" alt="ヘラ">
   </div>
 
   <script>
@@ -132,10 +145,13 @@
     const uki = document.getElementById('uki'); // ウキの画像要素
     const ukiWrapper = document.getElementById('uki-wrapper'); // ウキをマスク表示するためのラッパーdiv
     const container = document.getElementById('container'); // 全体のコンテナdiv
+    const heracenterImage = document.getElementById('heracenter-image'); // ヘラ画像
 
     const startButton = document.getElementById('start-button'); // 「投入」ボタン
     const setButton = document.getElementById('set-button'); // 「アワセ」ボタン
     const timerDisplay = document.getElementById('timer'); // 経過時間を表示するdiv
+
+    let offset = 0; // ウキY軸のオフセット
 
     // タイマー制御用変数
     let startTime = null; // 開始ボタンを押した時間（Dateオブジェクト）
@@ -198,7 +214,14 @@
 
     // ウキをランダムに上下揺らす関数
     function animateUki(intensity = 1) {
-      const offset = (Math.random() * 2 - 1) * 2 * intensity; // ランダムな上下揺れ幅（-2〜2px）
+      let rand = Math.random() - 0.5; // -0.5〜0.5の乱数
+      offset = rand * rand * 16 * intensity * Math.sign(rand); // 上下揺れ幅（-4〜4pxを非線形に）
+      if (Math.random() < 0.01) {
+        offset *= 10; // 1%の確率でoffsetを5倍にする
+      }
+      if (Math.random() < 0.1) {
+        offset *= 10; // 10%の確率でoffsetを2倍にする
+      }
       uki.style.transition = 'top 0.2s ease-in-out';
       uki.style.top = `${offset}px`;
     }
@@ -299,6 +322,14 @@
       
       // ウキを非表示にする
       ukiWrapper.style.display = 'none';
+
+      if (Math.abs(offset) >= 2) { // ウキに変化がある状態を、食い上げ、消込みの絶対値で指定
+        // ヘラ画像を3秒表示
+        heracenterImage.style.display = 'block';
+        setTimeout(() => {
+          heracenterImage.style.display = 'none';
+        }, 3000);
+      }
       
       // ボタンの状態を変更
       //setButton.style.display = 'none';
