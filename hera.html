@@ -17,7 +17,7 @@
       100% { border-color: rgba(255, 0, 0, 0.8); box-shadow: 0 0 8px rgba(255, 0, 0, 0.4); }
     }
 
-    /* heracenter表示用 */
+    /* heracenter表示用 上あごセンターがっちり*/
     #heracenter-image {
       position: absolute;
       top: 50%;
@@ -28,6 +28,36 @@
       z-index: 4;
       display: none; /* 初期状態では非表示 */
     }
+    /* hera表示用 普通に釣れた*/
+    #hera-image {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30%; /* 画面サイズの半分 */
+      max-width: 800px; /* 最大幅を設定 */
+      z-index: 4;
+      display: none; /* 初期状態では非表示 */
+    }
+
+    /* スコア表示パネル */
+    #score-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 10px 15px;
+      border-radius: 10px;
+      font-family: sans-serif;
+      font-size: 16px;
+      z-index: 3;
+      text-align: left;
+    }
+
+    #score-panel div {
+      margin-bottom: 5px;
+    }
+
   </style>
   <meta charset="UTF-8">
   <title>ウキが浮かぶ釣り場</title>
@@ -134,9 +164,18 @@
     <div id="control-panel">
       <button id="start-button" class="control-button">投入</button> <!-- 投入ボタン -->
       <button id="set-button" class="control-button" disabled>アワセ</button> <!-- アワセボタン -->
-      <div id="timer">00:00:00</div>
+      <div id="timer">05:00:00</div>
     </div>
-    <img id="heracenter-image" src="./pic/heracenter.jpg" alt="ヘラ">
+
+    <!-- スコア表示パネル -->
+    <div id="score-panel" style="font-family: 'Uzura', sans-serif; font-size: 24pt;">
+      <div>普通に釣ったヘラ: <span id="hera-count">000</span>匹 x 1pt</div>
+      <div>センターがっちり: <span id="heracenter-count">000</span>匹 x 10pt</div>
+      <div>得点: <span id="total-score">0</span> pt</div>
+    </div>
+
+    <img id="heracenter-image" src="./pic/heracenter.jpg" alt="センターがっちり">
+    <img id="hera-image" src="./pic/hera.png" alt="ヘラ">
   </div>
 
   <script>
@@ -145,16 +184,25 @@
     const uki = document.getElementById('uki'); // ウキの画像要素
     const ukiWrapper = document.getElementById('uki-wrapper'); // ウキをマスク表示するためのラッパーdiv
     const container = document.getElementById('container'); // 全体のコンテナdiv
-    const heracenterImage = document.getElementById('heracenter-image'); // ヘラ画像
+    const heracenterImage = document.getElementById('heracenter-image'); // ヘラ画像(センターがっちり)
+    const heraImage = document.getElementById('hera-image'); // ヘラ画像(センターがっちり)
 
     const startButton = document.getElementById('start-button'); // 「投入」ボタン
     const setButton = document.getElementById('set-button'); // 「アワセ」ボタン
     const timerDisplay = document.getElementById('timer'); // 経過時間を表示するdiv
 
+    // スコア表示用の要素
+    const heraCountDisplay = document.getElementById('hera-count');
+    const heracenterCountDisplay = document.getElementById('heracenter-count');
+
     let offset = 0; // ウキY軸のオフセット
 
+    // スコア変数
+    let heraCount = 0;
+    let heracenterCount = 0;
+
     // タイマー制御用変数
-    let startTime = null; // 開始ボタンを押した時間（Dateオブジェクト）
+    let timeLeft = 5 * 60 * 1000; // 5 minutes in milliseconds
     let timerInterval = null; // setIntervalのID、タイマー更新用
 
     // ウキ表示調整用スケール変数
@@ -215,7 +263,7 @@
     // ウキをランダムに上下揺らす関数
     function animateUki(intensity = 1) {
       let rand = Math.random() - 0.5; // -0.5〜0.5の乱数
-      offset = rand * rand * 16 * intensity * Math.sign(rand); // 上下揺れ幅（-4〜4pxを非線形に）
+      offset = rand * rand * 24 * intensity * Math.sign(rand); // 上下揺れ幅（-6〜6pxを非線形に）
       if (Math.random() < 0.01) {
         offset *= 10; // 1%の確率でoffsetを5倍にする
       }
@@ -270,12 +318,24 @@
 
     // タイマーを更新する関数（HH:MM:SS）
     function updateTimer() {
-      const now = new Date(); // 現在時刻
-      const elapsed = new Date(now - startTime); // 経過時間をDateオブジェクトに変換
-      const hh = String(elapsed.getUTCHours()).padStart(2, '0'); // 時（2桁ゼロ埋め）
-      const mm = String(elapsed.getUTCMinutes()).padStart(2, '0'); // 分（2桁ゼロ埋め）
-      const ss = String(elapsed.getUTCSeconds()).padStart(2, '0'); // 秒（2桁ゼロ埋め）
-      timerDisplay.textContent = `${hh}:${mm}:${ss}`;
+      timeLeft -= 1000; // 1秒減らす
+
+      if (timeLeft <= 0) {
+        timeLeft = 0;
+        clearInterval(timerInterval);
+        timerDisplay.textContent = 'ゲーム終了！';
+        startButton.disabled = true;
+        setButton.disabled = true;
+        return;
+      }
+
+      const minutes = Math.floor(timeLeft / (60 * 1000));
+      const seconds = Math.floor((timeLeft % (60 * 1000)) / 1000);
+      const milliseconds = timeLeft % 1000;
+
+      const mm = String(minutes).padStart(2, '0'); // 分（2桁ゼロ埋め）
+      const ss = String(seconds).padStart(2, '0'); // 秒（2桁ゼロ埋め）
+      timerDisplay.textContent = `00:${mm}:${ss}`;
     }
 
     // 「投入」ボタンが押されたときの処理
@@ -312,6 +372,7 @@
         updateTimer();
         timerInterval = setInterval(updateTimer, 1000);
         timerStarted = true; // タイマー開始フラグを立てる
+        updateTimer();
       }
     });
 
@@ -323,12 +384,29 @@
       // ウキを非表示にする
       ukiWrapper.style.display = 'none';
 
-      if (Math.abs(offset) >= 2) { // ウキに変化がある状態を、食い上げ、消込みの絶対値で指定
-        // ヘラ画像を3秒表示
+      // センターがっちりで高ポイント
+      if (Math.abs(offset) >= 4) { // ウキに変化がある状態を、食い上げ、消込みの絶対値で指定(シビア)
+        let offset = 0;
         heracenterImage.style.display = 'block';
         setTimeout(() => {
           heracenterImage.style.display = 'none';
         }, 3000);
+        // スコア加算
+        heracenterCount++;
+        heracenterCountDisplay.textContent = String(heracenterCount).padStart(3, '0');
+      }
+      // 普通に釣れて1ポイント
+      else if (Math.abs(offset) >= 1) { // ウキに変化がある状態を、食い上げ、消込みの絶対値で指定(ぬるい)
+        let offset = 0 ;
+        // ヘラ画像を3秒表示
+        heraImage.style.display = 'block';
+        setTimeout(() => {
+          heraImage.style.display = 'none';
+        }, 3000);
+
+        // スコア加算
+        heraCount++;
+        heraCountDisplay.textContent = String(heraCount).padStart(3, '0');
       }
       
       // ボタンの状態を変更
