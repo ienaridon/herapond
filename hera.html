@@ -3,6 +3,8 @@
 <head>
   <!-- Google Fontsのリンクとカスタムフォント定義 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Uzura&display=swap">
+  <meta charset="UTF-8">
+  <title>ヘラ野釣り</title>
   <style>
     /* フォント uzura を読み込み */
     @font-face {
@@ -52,16 +54,13 @@
       font-size: 16px;
       z-index: 3;
       text-align: left;
+      border: none; /* 初期状態ではボーダーをなくす */
     }
 
     #score-panel div {
       margin-bottom: 5px;
     }
 
-  </style>
-  <meta charset="UTF-8">
-  <title>ウキが浮かぶ釣り場</title>
-  <style>
     /* ページ全体の初期設定 */
     html, body {
       margin: 0;
@@ -117,7 +116,15 @@
       z-index: 3;
     }
 
-    /* 投入ボタンとアワセボタンの共通スタイル */
+    /* 経過時間表示 */
+    #timer {
+      margin-top: 5px;
+      font-weight: bold;
+      font-size: 48pt;
+      font-family: 'Uzura', sans-serif;
+    }
+
+    /* ボタンの共通スタイル */
     .control-button {
       padding: 5px 10px;
       font-size: 48pt;
@@ -128,7 +135,7 @@
       cursor: pointer;
       display: block; /* Ensure both buttons take full width */
       pointer-events: auto;
-      width: 250px; /* 揃えるために固定幅を設定 */
+      width: 300px; /* 揃えるために固定幅を設定 */
       text-align: center; /* 中央揃え */
     }
 
@@ -143,13 +150,18 @@
       margin-top: 10px;
     }
 
-    /* 経過時間表示 */
-    #timer {
-      margin-top: 5px;
-      font-weight: bold;
-      font-size: 48pt;
-      font-family: 'Uzura', sans-serif;
+    /* もう一度ボタン使用可能時*/
+    #new-game-button {
+      margin-top: 10px;
+      float: right;
     }
+
+    /* もう一度ボタン(使用不可時) */
+    #new-game-button:disabled {
+      border: none;
+      animation: none;
+    }
+
   </style>
 </head>
 <body>
@@ -164,14 +176,15 @@
     <div id="control-panel">
       <button id="start-button" class="control-button">投入</button> <!-- 投入ボタン -->
       <button id="set-button" class="control-button" disabled>アワセ</button> <!-- アワセボタン -->
-      <div id="timer">05:00:00</div>
+      <div id="timer">00:00:00</div>
     </div>
 
     <!-- スコア表示パネル -->
     <div id="score-panel" style="font-family: 'Uzura', sans-serif; font-size: 24pt;">
       <div>普通に釣ったヘラ: <span id="hera-count">000</span>匹 x 1pt</div>
       <div>センターがっちり: <span id="heracenter-count">000</span>匹 x 10pt</div>
-      <div>得点: <span id="total-score">0</span> pt</div>
+      <div>合計点: <span id="total-point">000</span>pt</div>
+    <button id="new-game-button" class="control-button">もう一度</button>
     </div>
 
     <img id="heracenter-image" src="./pic/heracenter.jpg" alt="センターがっちり">
@@ -179,41 +192,55 @@
   </div>
 
   <script>
+    // =========================================================================================
+    // 定数とグローバル変数
+    // =========================================================================================
     // DOM要素の参照
+    const container = document.getElementById('container'); // 全体のコンテナdiv
     const background = document.getElementById('background'); // 背景画像（釣り場の風景）のimg要素
+    const timerDisplay = document.getElementById('timer'); // 経過時間を表示するdiv
+
     const uki = document.getElementById('uki'); // ウキの画像要素
     const ukiWrapper = document.getElementById('uki-wrapper'); // ウキをマスク表示するためのラッパーdiv
-    const container = document.getElementById('container'); // 全体のコンテナdiv
+
     const heracenterImage = document.getElementById('heracenter-image'); // ヘラ画像(センターがっちり)
     const heraImage = document.getElementById('hera-image'); // ヘラ画像(センターがっちり)
 
     const startButton = document.getElementById('start-button'); // 「投入」ボタン
     const setButton = document.getElementById('set-button'); // 「アワセ」ボタン
-    const timerDisplay = document.getElementById('timer'); // 経過時間を表示するdiv
+    const newGameButton = document.getElementById('new-game-button');
 
-    // スコア表示用の要素
-    const heraCountDisplay = document.getElementById('hera-count');
-    const heracenterCountDisplay = document.getElementById('heracenter-count');
+    // -----------------------------------------------------------------------------------------
+    // ゲーム時間
+    const gametime = 5 * 60 * 1000 + 2000; // 5 minutes in milliseconds ;
+    let timeLeft = gametime ;
+    let timerInterval = null; // setIntervalのID、タイマー更新用
+    let timerStarted = false;     // タイマー開始フラグ
 
-    let offset = 0; // ウキY軸のオフセット
-
+    // -----------------------------------------------------------------------------------------
     // スコア変数
     let heraCount = 0;
     let heracenterCount = 0;
+    // スコア表示用の要素
+    const heraCountDisplay = document.getElementById('hera-count');
+    const heracenterCountDisplay = document.getElementById('heracenter-count');
+    const totalCountDisplay = document.getElementById('total-point');
+    
 
-    // タイマー制御用変数
-    let timeLeft = 5 * 60 * 1000; // 5 minutes in milliseconds
-    let timerInterval = null; // setIntervalのID、タイマー更新用
+    // -----------------------------------------------------------------------------------------
+    // ウキの位置(上下幅)
+    let offset = 0; // ウキY軸のオフセット
+    const offsetHistoryMax = 3; // うきY軸のヒストリーここが難易度調整
+    let offsetHistory = [];
 
     // ウキ表示調整用スケール変数
     let ukiScale = 1; // ウキの拡大率（背景に対する相対サイズ）
     let maskHeight = 0; // ウキの上半分の高さ（マスク用）
     let scaledHeight = 0; // スケーリング後のウキの高さ（px）
 
-    // タイマー開始フラグ
-    let timerStarted = false;
-
+    // =========================================================================================
     // ウキと背景のサイズ・位置調整関数
+    // =========================================================================================
     function positionUki() {
       const containerRect = container.getBoundingClientRect(); // コンテナのサイズ情報を取得
       const bgRatio = background.naturalWidth / background.naturalHeight; // 背景画像の縦横比
@@ -254,14 +281,49 @@
       uki.style.top = `0px`;
     }
 
+    // =========================================================================================
     // 画像読み込み完了後にコールバック実行
+    // =========================================================================================
     function whenLoaded(img, callback) {
       if (img.complete) callback(); // 画像がすでに読み込まれている場合、すぐにコールバック実行
       else img.onload = callback; // 読み込みがまだの場合、onloadでコールバック実行
     }
 
-    // ウキをランダムに上下揺らす関数
+    // =========================================================================================
+    // ウキの動き
+    // =========================================================================================
     function animateUki(intensity = 1) {
+
+      for (let i = offsetHistoryMax - 1; i > 0; i--) { // offset の履歴更新
+        offsetHistory[i] = offsetHistory[i - 1];
+      }
+      offsetHistory[0] = offset ;
+
+      if (Math.random() < 0.1) { // 消込
+        // 10%の確率でoffsetを0にして、ランダムな時間待機
+        offset = 40;
+        uki.style.transition = 'top 0.2s ease-in-out';
+        uki.style.top = `${offset}px`;
+        const delay = 3000 + Math.random() * 5000; // 最大2秒の遅延
+        setTimeout(() => {
+          animateUki(intensity); // 待機後、アニメーションを再開
+        }, delay);
+        return; // アニメーション関数の実行を中断
+      }
+
+      if (Math.random() < 0.8) { // 魚が寄っていない
+        // 80%の確率でoffsetを0にして、ランダムな時間待機
+        offset = 0;
+        uki.style.transition = 'top 0.2s ease-in-out';
+        uki.style.top = `${offset}px`;
+        const delay = Math.random() * 3000; // 最大2秒の遅延
+        setTimeout(() => {
+          animateUki(intensity); // 待機後、アニメーションを再開
+        }, delay);
+        return; // アニメーション関数の実行を中断
+      }
+
+      // ゆらゆら状態
       let rand = Math.random() - 0.5; // -0.5〜0.5の乱数
       offset = rand * rand * 24 * intensity * Math.sign(rand); // 上下揺れ幅（-6〜6pxを非線形に）
       if (Math.random() < 0.01) {
@@ -272,9 +334,12 @@
       }
       uki.style.transition = 'top 0.2s ease-in-out';
       uki.style.top = `${offset}px`;
+
     }
 
-    // ランダムなBGM再生を制御
+    // =========================================================================================
+    // BGM再生の制御(野鳥の声をランダム再生)
+    // =========================================================================================
     function playRandomBGM() {
       const bgmList = [
         './bgm/ウグイス.mp3', './bgm/ウグイスのさえずり1.mp3', './bgm/オオヨシキリのさえずり.mp3',
@@ -316,43 +381,61 @@
       }, { once: true });
     }
 
-    // タイマーを更新する関数（HH:MM:SS）
+
+    // =========================================================================================
+    // 終了処理
+    // =========================================================================================
+    function endGame() {
+      clearInterval(timerInterval);
+//      alert('ゲーム終了！');
+      startButton.disabled = true;
+      setButton.disabled = true;
+//      document.getElementById('score-panel').style.border = '5px solid gold';
+      document.getElementById('score-panel').style.animation = 'blink-border 2s infinite';
+      newGameButton.disabled = false;
+      newGameButton.style.border = '5px solid red';
+      newGameButton.style.animation = 'blink-border 2s infinite';
+
+      // setTimeoutで設定されたタイマーをクリア
+      let highestTimeoutId = setTimeout(function(){});
+      for (let i = 0 ; i < highestTimeoutId ; i++) {
+        clearTimeout(i); 
+      }
+    }
+
+    // =========================================================================================
+    // タイマー更新（HH:MM:SS）
+    // =========================================================================================
     function updateTimer() {
       timeLeft -= 1000; // 1秒減らす
-
+      // 終了処理
       if (timeLeft <= 0) {
         timeLeft = 0;
-        clearInterval(timerInterval);
-        timerDisplay.textContent = 'ゲーム終了！';
-        startButton.disabled = true;
-        setButton.disabled = true;
-        return;
+        endGame() ; // 終了処理
       }
-
+      // ---------------------------------------------------------------------------------------
+      // 表示
       const minutes = Math.floor(timeLeft / (60 * 1000));
       const seconds = Math.floor((timeLeft % (60 * 1000)) / 1000);
       const milliseconds = timeLeft % 1000;
-
       const mm = String(minutes).padStart(2, '0'); // 分（2桁ゼロ埋め）
       const ss = String(seconds).padStart(2, '0'); // 秒（2桁ゼロ埋め）
       timerDisplay.textContent = `00:${mm}:${ss}`;
     }
 
+    // =========================================================================================
     // 「投入」ボタンが押されたときの処理
+    // =========================================================================================
     startButton.addEventListener('click', () => {
       // 効果音：投入ボタンを押したとき
-      new Audio('./se/decision22.mp3').play();
-
-      // 2秒後にBGMを開始
-      setTimeout(() => {
-        playRandomBGM();
-      }, 2000);
+      new Audio('./se/sword-gesture2.mp3').play();
 
       // ボタンとウキの設定
       ukiWrapper.style.display = 'block';
       setButton.style.display = 'block';
       setTimeout(() => {
         setButton.disabled = false; // 「アワセ」ボタンを3秒後に有効化
+        new Audio('./se/decision22.mp3').play(); // ウキが立った的な音に変えたい
       }, 3000);
       startButton.disabled = true; // 「投入」ボタンを無効化
 
@@ -376,18 +459,34 @@
       }
     });
 
+    // =========================================================================================
     // 「アワセ」ボタンが押されたときの処理
+    // =========================================================================================
     setButton.addEventListener('click', () => {
-      // 効果音：アワセボタンを押したとき
+      // 効果音：アワセた
       new Audio('./se/sword-gesture2.mp3').play();
-      
       // ウキを非表示にする
       ukiWrapper.style.display = 'none';
-
-      // センターがっちりで高ポイント
-      if (Math.abs(offset) >= 4) { // ウキに変化がある状態を、食い上げ、消込みの絶対値で指定(シビア)
+      // ----------------------------------------------------------------------------------------
+      // アタリ判定処理開始
+      let normalHit = false;
+      let centerHit = false;
+      // 履歴の中でもヒットを見る
+      for (let i = 0; i < offsetHistory.length; i++) { // アタリ判定
+        if (Math.abs(offsetHistory[i]) >= 4) { // センターがっちり
+          centerHit = true;
+          break;
+        }
+        if (Math.abs(offsetHistory[i]) >= 1) { // ノーマル
+          normalHit = true;
+          break;
+        }
+      }
+      // ----------------------------------------------------------------------------------------
+      // 判定後処理
+      if (centerHit) { // センターがっちりの処理
         let offset = 0;
-        heracenterImage.style.display = 'block';
+        heracenterImage.style.display = 'block'; // センターがっちり写真の表示
         setTimeout(() => {
           heracenterImage.style.display = 'none';
         }, 3000);
@@ -395,29 +494,30 @@
         heracenterCount++;
         heracenterCountDisplay.textContent = String(heracenterCount).padStart(3, '0');
       }
-      // 普通に釣れて1ポイント
-      else if (Math.abs(offset) >= 1) { // ウキに変化がある状態を、食い上げ、消込みの絶対値で指定(ぬるい)
+      else if (normalHit) { // 普通に釣れた時の処理
         let offset = 0 ;
-        // ヘラ画像を3秒表示
-        heraImage.style.display = 'block';
+        heraImage.style.display = 'block';    // ヘラ画像を3秒表示
         setTimeout(() => {
           heraImage.style.display = 'none';
         }, 3000);
-
         // スコア加算
         heraCount++;
-        heraCountDisplay.textContent = String(heraCount).padStart(3, '0');
+        heraCountDisplay.textContent = String(+heraCount).padStart(3, '0');
       }
-      
-      // ボタンの状態を変更
-      //setButton.style.display = 'none';
+      // ----------------------------------------------------------------------------------------
+      // 共通の終了処理
+      totalCountDisplay.textContent = String(heracenterCount * 10 + heraCount).padStart(3, '0');
+
       setButton.disabled = true; // 「アワセ」ボタンを無効化
       setTimeout(() => {
         startButton.disabled = false; // 「投入」ボタンを3秒後に有効にする
+        new Audio('./se/decision22.mp3').play(); // ウキが立った的な音に変えたい
       }, 3000);
     });
 
+    // =========================================================================================
     // ページ初期化処理
+    // =========================================================================================
     whenLoaded(background, () => {
       whenLoaded(uki, () => {
         positionUki(); // サイズ調整
@@ -425,6 +525,42 @@
         setInterval(() => animateUki(), 200); // ウキを動かす
       });
     });
+
+    // =========================================================================================
+    // 新規ボタン
+    // =========================================================================================
+      newGameButton.addEventListener('click', () => {
+        // Reset timer
+        timeLeft = gametime ;
+        timerStarted = false;
+        clearInterval(timerInterval);
+        timerDisplay.textContent = '00:00:00';
+
+        // Reset score
+        heraCount = 0;
+        heracenterCount = 0;
+        heraCountDisplay.textContent = '000';
+        heracenterCountDisplay.textContent = '000';
+        totalCountDisplay.textContent = '000';
+
+        // Enable start button, disable set button
+        startButton.disabled = false;
+        setButton.disabled = true;
+//        setButton.style.display = 'none';
+        ukiWrapper.style.display = 'none';
+
+        // Reset button styles
+        startButton.style.border = '5px solid red';
+        startButton.style.animation = 'blink-border 2s infinite';
+        document.getElementById('score-panel').style.animation = 'none';
+        document.getElementById('score-panel').style.border = 'none';
+        newGameButton.disabled = true;
+        newGameButton.style.border = 'none';
+        newGameButton.style.animation = 'none';
+      });
+      newGameButton.disabled = true;
+      newGameButton.style.border = 'none';
+      newGameButton.style.animation = 'none';
   </script>
 </body>
 </html>
